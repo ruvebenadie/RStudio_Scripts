@@ -1,0 +1,68 @@
+---
+title: "708_Prac6"
+author: "16062664 Ruve Benadie"
+date: "26/05/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+#install libraries
+library(rgdal)
+library(sp)
+library(maptools)
+library(spdep)
+library(spatialreg)
+
+#read data
+fgdb <- 'C:/Users/ruveb/Downloads/Practical 6_Materials/unemployment_data.gdb'
+fc_list <- ogrListLayers(fgdb)
+unemp <- readOGR(dsn=fgdb,layer="unemployed_2011_gp")
+head(unemp)
+plot(unemp)
+unemp_df <- as.data.frame(unemp)
+
+##multiple regression model
+unemp_OLS <- lm(perc_unemployed~perc_home_internet+perc_television+perc_washing_machine+perc_cellphone+perc_stove+perc_computer, data = unemp_df)
+summary(unemp_OLS)
+
+#read spatial weight file
+ward_nb <- read.gal("C:/Users/ruveb/Downloads/Practical 6_Materials/unemployment_data.gdb/Ward_Weight.gal", override.id = TRUE)
+ward_weight <- nb2listw(ward_nb, zero.policy = TRUE)
+
+##Compute the Global Moran's I of the residuals
+lm.morantest(lm(unemp_OLS), listw = ward_weight)
+
+#Lagrange test
+lm.LMtests(unemp_OLS, listw = ward_weight)
+
+
+#spatial error model
+SEM <-errorsarlm(perc_unemployed~perc_home_internet+perc_television+perc_washing_machine+perc_cellphone+perc_stove+perc_computer, data = unemp_df, ward_weight)
+summary(SEM)
+moran_residuals_SEM <- moran.test(SEM$residuals, listw = ward_weight)
+moran_residuals_SEM
+
+#read gov data
+fgdb2 <- 'C:/Users/ruveb/Downloads/Practical 6_Materials/dissatisfaction_with_gov_performance.gdb'
+fc_list2 <- ogrListLayers(fgdb2)
+gov <- readOGR(dsn=fgdb2,layer="dissatisfaction_with_gov_performance")
+head(gov)
+plot(gov)
+gov_df <- as.data.frame(gov)
+
+##multiple regression model
+gov_OLS <- lm(LocGov~DissDwell+NoBathPele+MnAccSatis+CntryWD+CP_Crim+CP_Unemp+CP_Politic, data = gov_df)
+summary(gov_OLS)
+
+
+
+
+
+
+
+
+```
+

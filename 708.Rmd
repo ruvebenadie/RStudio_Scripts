@@ -1,0 +1,132 @@
+---
+title: "708 Prac 5"
+author: "16062664 Ruve Benadie"
+date: "17/05/2022"
+output: html_document
+---
+
+
+```{r}
+library(lattice)
+library(sp)
+library(gstat)
+library(rgdal)
+library(sp)
+library(maptools)
+library(spdep)
+library(raster)
+library(rasterVis)
+library(ggplot2)
+
+#Read data
+fgdb <- 'C:/Users/ruveb/Downloads/Practical 5_Materials/UK_pm25.gdb'
+fc_list <- ogrListLayers(fgdb)
+UK_pm25 <- readOGR(dsn=fgdb,layer="UK_pm25")
+plot(UK_pm25)
+
+#graphs to check for spatial autocorrelation at specified intervals
+hscat(log(pm25)~1, UK_pm25, c(0, 50000))
+hscat(log(pm25)~1, UK_pm25, c(100000, 150000))
+hscat(log(pm25)~1, UK_pm25, c(200000, 250000))
+hscat(log(pm25)~1, UK_pm25, c(300000,350000))
+hscat(log(pm25)~1, UK_pm25, c(400000, 450000))
+
+#variogram cloud
+plot(variogram(log(pm25) ~ 1, UK_pm25, cloud = TRUE))
+
+#sample variogram
+plot(variogram(log(pm25)~1, UK_pm25))
+#Check bins
+variogram(log(pm25)~1, UK_pm25)
+
+#get possible models
+vgm()
+show.vgms()
+
+#set sample variogram
+v<- variogram(log(pm25)~1, UK_pm25)
+plot(v)
+
+#Gaussian model
+fitG<- fit.variogram(v, vgm(1, "Gau", 50000, 1))
+plot(v, fitG)
+
+#Bessel model
+fitB<- fit.variogram(v, vgm(1, "Bes", 50000, 1))
+plot(v, fitB)
+
+#split data 80% and 20%
+dt = sort(sample(nrow(UK_pm25), nrow(UK_pm25)*0.80))
+model<-UK_pm25[dt,]
+validation<-UK_pm25[-dt,]
+
+#sample variogram based on Gaussian model
+v1<- variogram(log(pm25)~1, model)
+fitG2<- fit.variogram(v1, vgm(1, "Gau", 50000, 1))
+plot(v1, fitG2)
+
+#ordinary kriging based on gaussian model
+ok <- krige(log(pm25) ~ 1, model, validation, fitG2)
+plot(ok)
+
+#residual mean 
+resid.kr <- log(validation$pm25) - ok$var1.pred
+summary(resid.kr)
+
+#coefficient of determination
+resid.mean <- log(validation$pm25) - mean(log(validation$pm25))
+R2 <- 1 - sum(resid.kr^2)/sum(resid.mean^2)
+R2 
+ok$res <- resid.kr
+bubble(ok, "res")
+
+#sample variogram based on Bessel model
+fitB2<- fit.variogram(v1, vgm(1, "Bes", 50000, 1))
+plot(v1, fitB2)
+
+#ordinary kriging based on Bessel model
+okB <- krige(log(pm25) ~ 1, model, validation, fitB2)
+plot(okB)
+
+#residual mean 
+resid.krB <- log(validation$pm25) - okB$var1.pred
+summary(resid.krB)
+
+#coefficient of determination
+resid.meanB <- log(validation$pm25) - mean(log(validation$pm25))
+R2B <- 1 - sum(resid.krB^2)/sum(resid.meanB^2)
+R2B 
+okB$res <- resid.krB
+bubble(okB, "res")
+
+#Sample variogram of pm25
+plot(variogram(log(pm25)~1, UK_pm25))
+
+#fit Bessel to sample variogram
+v4<- variogram(log(pm25)~1, UK_pm25)
+fitB4<- fit.variogram(v4, vgm(1, "Bes", 50000, 1))
+plot(v4, fitB4)
+
+#predict over districts of UK
+#read UK boundary data
+fgdb1 <- 'C:/Users/ruveb/Downloads/Practical 5_Materials/AdminBoundaries.gdb'
+fc_list1<- ogrListLayers(fgdb1)
+boundary <- readOGR(dsn=fgdb1,layer="UK")
+plot(boundary)
+
+#ordinary kriging
+okUK <- krige(log(pm25) ~ 1, UK_pm25, boundary, fitB4)
+
+##map predicted values
+spplot(okUK["var1.pred"])
+
+##map variance
+spplot(okUK["var1.var"])
+
+
+
+
+
+
+```
+

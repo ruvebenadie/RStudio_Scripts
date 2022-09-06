@@ -1,0 +1,170 @@
+---
+title: "704_Prac"
+author: "16062664 Ruve Benadie"
+date: "30/05/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+#load libraries
+library(sf)
+library(sp)
+library(spdep)
+library(spgwr)
+library(rgdal)
+library(ggmap)
+library(rgeos)
+library(tmap)
+library(tmaptools)
+
+#read data from csv file
+csv_data <- read.csv('C:/Users/ruveb/Downloads/practicaldata.csv')
+head(csv_data)
+
+#read data from shp file
+shp_data <- readOGR(dsn="C:/Users/ruveb/Downloads/Camden_oa11",layer="Camden_oa11")
+head(shp_data) 
+
+#join data on OA11CD/OA field
+camden <- merge(shp_data, csv_data, by.x='OA11CD', by.y = 'OA')
+head(camden)
+
+#save merged data
+#shapefile(camden, "C:/Users/ruveb/Downloads/Camden_oa11/camden.shp")
+
+#statistical summary of data
+#summary of all data
+summary(camden)
+
+#standard deviation of columns
+sd(camden$White_British)
+sd(camden$Low_Occupancy)
+sd(camden$Unemployed)
+sd(camden$Qualification)
+
+#box plots of data columns
+boxplot(camden$White_British)
+boxplot(camden$Low_Occupancy)
+boxplot(camden$Unemployed)
+boxplot(camden$Qualification)
+
+#choropleth map
+qtm(camden, "White_British")
+qtm(camden, "Low_Occupancy")
+qtm(camden, "Unemployed")
+qtm(camden, "Qualification")
+
+#compute spatial weights matrix (Queen)
+wm_q <- poly2nb(camden, queen=TRUE)
+summary(wm_q)
+
+#display contiguity map
+plot(camden, border="lightgrey")
+plot(wm_q, coordinates(camden), pch = 19, cex = 0.6, add = TRUE, col= "red")
+
+#standardize weight matrix
+rswm_q <- nb2listw(wm_q, zero.policy = TRUE)
+summary(rswm_q)
+
+#locali Moran's I
+fips <- order(camden$OA11CD)
+localMI <- localmoran(camden$Qualification, rswm_q)
+head(localMI)
+printCoefmat(data.frame(localMI[fips,], row.names=camden$OA11CD[fips]), check.names=FALSE)
+
+#mapping local Moran's I
+camden.localMI <- cbind(camden,localMI)
+moran.map <- tm_shape(camden.localMI) +
+  tm_fill(col = "Ii", 
+          style = "pretty",
+          palette = "RdBu",
+          title = "local moran statistics") +
+  tm_borders(alpha = 0.5)
+
+p.map <- tm_shape(camden.localMI) +
+  tm_fill(col = "Pr.z....E.Ii..",
+          title = "p-values")+
+  tm_borders(alpha = 0.5)
+
+tmap_arrange(moran.map, p.map)
+
+#Lisa map
+quadrant <- vector(mode="numeric",length=nrow(localMI))
+DV <- camden$Qualification - mean(camden$Qualification)   
+C_mI <- localMI[,1] - mean(localMI[,1]) 
+signif <- 0.05 
+
+#define the high-high, low-low, low-high and high-low categories
+quadrant[DV >0 & C_mI>0] <- 4      
+quadrant[DV <0 & C_mI<0] <- 1      
+quadrant[DV <0 & C_mI>0] <- 2
+quadrant[DV >0 & C_mI<0] <- 3
+quadrant[localMI[,5]>signif] <- 0 #non-significant
+
+camden.localMI$quadrant <- quadrant
+colors <- c("#ffffff", "#2c7bb6", "#abd9e9", "#fdae61", "#d7191c")
+clusters <- c("insignificant", "low-low", "low-high", "high-low", "high-high")
+
+tm_shape(camden.localMI) +
+  tm_fill(col = "quadrant", style = "cat", palette = colors[c(sort(unique(quadrant)))+1], labels = clusters[c(sort(unique(quadrant)))+1], popup.vars = c("Postal.Code")) +
+  tm_view(set.zoom.limits = c(11,17)) +
+  tm_borders(alpha=0.5)
+
+#Hot Spot and Cold Spot Area Analysis
+#fixed distance proximity matrix
+dnb <- dnearneigh(coordinates(camden), 0, 85, longlat = TRUE)
+dnb
+
+#display contiguity
+plot(camden, border = 'lightgrey')
+plot(dnb, coordinates(camden), add=TRUE, col='red')
+
+#no neighbours set to 0
+dnb_lw <- nb2listw(dnb, style = 'B', zero.policy = TRUE)
+summary(dnb_lw, zero.policy=TRUE)
+
+#Creating adaptive proximity matrix
+coords <- coordinates(camden)
+knb <- knn2nb(knearneigh(coords, k=8, longlat = TRUE), row.names=row.names(camden$gdppc))
+knb_lw <- nb2listw(knb, style = 'B')
+summary(knb_lw)
+
+plot(camden, border="lightgrey")
+plot(knb, coordinates(camden), pch = 19, cex = 0.6, add = TRUE, col = "red")
+
+#Gi statistics using fixed distance
+gi.fixed <- localG(camden$Qualification, dnb_lw)
+gi.fixed
+camden.gi <- cbind(camden, as.matrix(gi.fixed))
+names(camden.gi)[6] <- "gstat"
+
+#Gi statistics using adaptive distance
+gi.adaptive <- localG(camden$Qualification, knb_lw)
+gi.adaptive
+camden.gi1 <- cbind(camden, as.matrix(gi.adaptive))
+names(camden.gi1)[6] <- "gstat_adaptive"
+
+#Mapping Gi values with fixed distance weights
+tm_shape(camden.gi) +
+  tm_fill(col = "gstat", 
+          style = "pretty",
+          palette="-RdBu",
+          title = "local Gi") +
+  tm_borders(alpha = 0.5)
+
+#Mapping Gi values with adaptive distance weights
+tm_shape(camden.gi1) +
+  tm_fill(col = "gstat_adaptive",
+          style = "pretty",
+          palette = "-RdBu",
+          title = "local Gi") +
+  tm_borders(alpha = 0.5)
+
+
+
+
+```
+
