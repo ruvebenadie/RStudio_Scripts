@@ -1,0 +1,81 @@
+---
+title: "Untitled"
+author: "Ruve Benadie 16062664 Victoria Courtenay 16066449"
+date: "15/09/2021"
+output: html_document
+---
+
+```{r}
+library(raster)
+library(rasterVis)
+library(rgdal)
+library(sp)
+library(RStoolbox)
+library(sf)
+library(maptools)
+
+#read metadata
+meta <- readMeta("LC08_L1TP_170078_20170329_20170414_01_T1_MTL.txt")
+summary(meta)
+
+#Create raster stack
+landsat <-stackMeta(meta)
+landsat
+
+#drop bands form raster stack
+landsat8<-dropLayer(landsat, c(8,9,10))
+landsat8
+
+#plot different bands
+spplot(landsat8, col.regions = rainbow(99, start=.1))
+
+#check conversion parameters
+L8_radParameters <- meta$CALRAD
+L8_radParameters
+
+#convert to top of atmosphere radiance
+rad_L8 <- radCor(landsat8, meta = meta, method = "rad")
+rad_L8
+
+#convert DN to TOA
+apref_L8 <- radCor(landsat8, meta = meta, method = "apref")
+apref_L8
+
+#SDOS
+#haze correction
+hazeDN <- estimateHaze(landsat8, hazeBands = 1:5, darkProp = 0.01, plot = TRUE)
+
+sdos_L8 <- radCor(landsat8, meta = meta, method = "sdos",hazeValues = hazeDN, hazeBands = 1:5)
+sdos_L8
+plotRGB(sdos_L8, r=5, g=4, b=3, stretch="lin")
+
+#DOS
+dos_L8 <- radCor(landsat8, meta = meta, method = "dos")
+dos_L8
+plotRGB(dos_L8, r=5, g=4, b=3, stretch="lin")
+
+#COST
+costz_L8 <-radCor(landsat8, meta=meta, method="costz",hazeValues=hazeDN, hazeBands = 1:5)
+costz_L8
+plotRGB(costz_L8, r=5, g=4, b=3, stretch="lin")
+
+#Part 1 Question 1 Stats
+#uncorrected
+summary(landsat8)
+
+#apparent
+summary(apref_L8)
+
+#SDOS
+summary(sdos_L8)
+
+#DOS
+summary(dos_L8)
+
+#COST
+summary(costz_L8)
+
+
+
+```
+

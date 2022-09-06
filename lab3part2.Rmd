@@ -1,0 +1,114 @@
+---
+title: "Untitled"
+author: "Ruve Benadie 16062664 Victoria Courtenay 16066449"
+date: "17/09/2021"
+output: html_document
+---
+
+```{r}
+library(raster)
+library(rasterVis)
+library(rgdal)
+library(sp)
+library(RStoolbox)
+library(sf)
+library(maptools)
+library(ggplot2)
+
+getwd()
+#read bands
+B2 <- raster("RT_T35JQJ_20210319T073621_B02.tif")
+B3 <- raster("RT_T35JQJ_20210319T073621_B03.tif")
+B4 <- raster("RT_T35JQJ_20210319T073621_B04.tif")
+B5 <- raster("RT_T35JQJ_20210319T073621_B05.tif")
+B6 <- raster("RT_T35JQJ_20210319T073621_B06.tif")
+B7 <- raster("RT_T35JQJ_20210319T073621_B07.tif")
+B8 <- raster("RT_T35JQJ_20210319T073621_B08.tif")
+B8A <- raster("RT_T35JQJ_20210319T073621_B8A.tif")
+B11 <- raster("RT_T35JQJ_20210319T073621_B11.tif")
+B12 <- raster("RT_T35JQJ_20210319T073621_B12.tif")
+
+#create raster stack
+S2 <- stack(B2, B3, B4, B5, B6, B6, B7, B8, B8A, B11, B12)
+S2
+
+#change names of bands
+names(S2)
+names(S2) <- c('Blue', 'Green', 'Red', 'RedEdge', 'RedEdge', 'RedEdge', 'RedEdge', 'NIR', 'RedEdge', 'SWIR1', 'SWIR2')
+
+#import boudaries of maize/beans
+Soyabean <- shapefile('Soyabean_land.sh')
+maize <- shapefile('Maize under irrigation.sh')
+
+#check extent
+extent(S2)
+extent(Soyabean)
+extent(maize)
+
+#obtain crs of datasets
+crs(S2)
+crs(Soyabean)
+crs(maize)
+
+#set to same crs
+Soyabean <- spTransform(Soyabean, CRS("+proj=utm +zone=35 +south +datum=WGS84 +units=m +no_defs"))
+maize <- spTransform(maize, CRS("+proj=utm +zone=35 +south +datum=WGS84 +units=m +no_defs"))
+
+#crop s2
+crop_soyabean      = crop (S2, extent(Soyabean))        # Crop
+mask_soyabean      = mask (crop_soyabean, Soyabean, filename="Soyabean_S2.img", overwrite=TRUE)               # Mask
+plot(mask_soyabean)
+crop_maize     = crop (S2, extent(maize))        # Crop
+mask_maize      = mask (crop_maize, maize, filename="maize_S2.img", overwrite=TRUE)               # Mask
+plot(mask_maize)
+
+#spectral profiles
+sampdata <- shapefile('Maize_Soya.sh')
+#compare crs
+crs(S2)
+crs(sampdata)
+#extent
+extent(S2)
+extent(sampdata)
+#check variable of ROI
+sampdata@data
+
+#generate 1000 point samples from the polygons
+ptsamp <- spsample(sampdata, 1000, type='regular')
+# add the land cover class to the points
+ptsamp$class <- over(ptsamp, sampdata)$CLASS_NAME
+# extract values with points
+df <- extract(S2, ptsamp)
+#refelctance values
+head(df, n=10)
+#plot
+ms <- aggregate(df, list(ptsamp$class), mean)
+
+# instead of the first column, we use row names
+rownames(ms) <- ms[,1]
+ms <- ms[,-1]
+ms
+
+# Create a vector of color for the land cover classes for use in plotting
+mycolor <- c('red', 'green')
+#transform ms from a data.frame to a matrix
+ms <- as.matrix(ms)
+# First create an empty plot
+plot(0, ylim=c(0,1), xlim = c(1,11), type='n', xlab="S2 Bands", ylab = "Reflectance")
+# add the different classes
+for (i in 1:nrow(ms)){
+lines(ms[i,], type = "l", lwd = 3, lty = 1, col = mycolor[i])
+}
+# Title
+title(main="Spectral Profile from Sentinel 2", font.main = 2)
+# Legend
+legend("topleft", rownames(ms),
+cex=0.8, col=mycolor, lty = 1, lwd =3, bty = "n")
+
+#stats
+summary(mask_soyabean)
+cellStats(mask_soyabean, stat = "sd")
+summary(mask_maize)
+cellStats(mask_maize, stat = "sd")
+```
+

@@ -1,0 +1,163 @@
+---
+title: "Untitled"
+author: "Ruve Benadie 16062664 Victoria Courtenay 16066449"
+date: "09/09/2021"
+output: html_document
+---
+```{r}
+#load library
+library(raster)
+library(rasterVis)
+library(knitr)
+library(rgdal)
+library(gdalUtils)
+library(sp)
+
+#Coastal/Acrosol
+B1 <- raster('LC08_L1TP_170078_20170329_20170414_01_T1_B1.tif')
+
+#Blue
+B2 <- raster('LC08_L1TP_170078_20170329_20170414_01_T1_B2.tif')
+
+#Green
+B3 <- raster('LC08_L1TP_170078_20170329_20170414_01_T1_B3.tif')
+
+#Red
+B4 <- raster('LC08_L1TP_170078_20170329_20170414_01_T1_B4.tif')
+
+#NIR
+B5 <- raster('LC08_L1TP_170078_20170329_20170414_01_T1_B5.tif')
+
+#SWIR-1
+B6 <- raster('LC08_L1TP_170078_20170329_20170414_01_T1_B6.tif')
+
+#SWIR-2
+B7 <- raster('LC08_L1TP_170078_20170329_20170414_01_T1_B7.tif')
+
+#Panchromatic
+B8 <- raster('LC08_L1TP_170078_20170329_20170414_01_T1_B8.tif')
+
+#Cirrus
+B9 <- raster('LC08_L1TP_170078_20170329_20170414_01_T1_B9.tif')
+
+#TIRS-1
+B10 <- raster('LC08_L1TP_170078_20170329_20170414_01_T1_B10.tif')
+
+#TIRS-2
+B11 <- raster('LC08_L1TP_170078_20170329_20170414_01_T1_B11.tif')
+
+#2 print variables/metadata for B5
+B5
+
+#3 create raster stack
+s <- stack(B1, B2, B3, B4, B5, B6, B7)
+s
+
+#4 plot greyscale image
+par(mfrow = c(2,2))
+plot(B2, main = "Blue", col = gray(0:100 / 100))
+plot(B3, main = "Green", col = gray(0:100 / 100))
+plot(B4, main = "Red", col = gray(0:100 / 100))
+plot(B5, main = "NIR", col = gray(0:100 / 100))
+
+#True colour image
+landsatRGB <- stack(B4, B3, B2)
+plotRGB(landsatRGB, axes = TRUE, stretch = "lin", main = "Landsat True Color Composite")
+
+#[4,3,2]
+landsatcomb1 <- stack(B4, B3, B2)
+plotRGB(landsatcomb1, axes = TRUE, stretch = "lin", main = "Combination 1")
+
+#[5,4,3]
+landsatcomb2 <- stack(B5, B4, B3)
+plotRGB(landsatcomb2, axes = TRUE, stretch = "lin", main = "Combination 2")
+
+#[5,6,4]
+landsatcomb3 <- stack(B5, B6, B4)
+plotRGB(landsatcomb3, axes = TRUE, stretch = "lin", main = "Combination 3")
+
+#[5,6,2]
+landsatcomb4 <- stack(B5, B6, B2)
+plotRGB(landsatcomb4, axes = TRUE, stretch = "lin", main = "Combination 4")
+
+#[7,6,4]
+landsatcomb5 <- stack(B7, B6, B4)
+plotRGB(landsatcomb5, axes = TRUE, stretch = "lin", main = "Combination 5")
+
+#Subset and rename bands
+landsat <- subset(s, 1:7)
+
+names(landsat)
+names(landsat) <- c('ultra-blue', 'blue', 'green', 'red', 'NIR', 'SWIR1', 'SWIR2')
+
+#Spatially crop image
+extent(landsat)
+e <- extent(600000,700000,-2800000, -2665879)
+landsatcrop <- crop(landsat,e)
+
+#Quick Stats
+summary(landsatcrop)
+cellStats(landsatcrop, stat = "sd")
+cellStats(landsatcrop, stat = "mean")
+
+#scatterplot matrix
+pairs(landsatcrop[[1:2]], main = "ultra-blue vs blue")
+pairs(landsatcrop[[2:3]], main = "blue vs green")
+pairs(landsatcrop[[5:7]], main = "NIR vs SWIR2")
+
+layerStats(landsatcrop, stat = 'cov')
+layerStats(landsatcrop, stat = 'pearson')
+
+#Extract pixels and spectral plots
+sampl <- readOGR("C:/Users/ruveb/Desktop/GMA 320/Lab2","Regionofinterest")
+
+#get crs of image
+crs(landsat)
+
+#set to same crs
+sampl <- spTransform(sampl, CRS("+proj=utm +zone=35 +datum=WGS84 +units=m +no_defs "))
+
+#generate sample points
+ptsamp <- spsample(sampl, 300, type='regular')
+
+#check column names
+names(sampl)
+
+#add classes to points
+ptsamp$CLASS_NAME <- over(ptsamp, sampl)$CLASS_NAME
+
+# extract values with points
+df <- extract(landsat, ptsamp)
+
+# To see some of the reflectance values
+head(df)
+
+ms <- aggregate(df, list(ptsamp$CLASS_NAME), mean)
+
+# instead of the first column, we use row names
+rownames(ms) <- ms[,1]
+ms <- ms[,-1]
+ms
+
+# Create a vector of color for the land cover classes for use in plotting
+mycolor <- c('darkred', 'yellow', 'burlywood', 'cyan', 'blue')
+#transform ms from a data.frame to a matrix
+
+ms <- as.matrix(ms)
+max(ms)
+min(ms)
+# First create an empty plot
+plot(0, ylim=c(5000,21170), xlim = c(1,7), type='n', xlab="Bands", ylab = "Reflectance")
+# add the different classes
+for (i in 1:nrow(ms)){
+lines(ms[i, ], type = "l", lwd = 3, lty = 1, col = mycolor[i])
+}
+# Title
+title(main="Spectral Profile from Landsat", font.main = 2)
+# Legend
+legend("topleft", rownames(ms),
+cex=0.8, col=mycolor, lty = 1, lwd =3, bty = "n")
+
+
+```
+
